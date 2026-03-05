@@ -30,13 +30,24 @@ class AgentState:
 
 def compute_metrics(state: AgentState, t: int, correction_applied: bool = False) -> Dict[str, float]:
     n1 = random.uniform(0.75, 0.98) if t < 15 else random.uniform(0.45, 0.75)
-    n2 = 0.90 if correction_applied else random.uniform(0.20, 0.55)
+    
+    target_cir = 0.9
+    raw_cir = 0.92 if correction_applied else random.uniform(0.20, 0.55)
+    n2 = min(raw_cir / target_cir, 1.0)
+    
+    edi_max = 1.0
     belief_div = max(abs(v - 0.5) for v in state.beliefs.values())
-    n3 = max(0.0, 1.0 - (belief_div * 1.5))
-    n4 = max(0.0, 1.0 - state.irreversibility_used)
-    freshness = min(1.0, max(0.0, 1.0 - (t - state.last_sync_time)/30.0))
-    n5 = freshness
+    n3 = max(1.0 - (belief_div / edi_max), 0.0)
+    
+    irrev_budget = 5.0
+    n4 = max(1.0 - (state.irreversibility_used / irrev_budget), 0.0)
+    
+    sf_max = 30.0
+    sf_val = float(t - state.last_sync_time)
+    n5 = max(1.0 - (sf_val / sf_max), 0.0)
+    
     n6 = 1.0 if state.swarm_coherent else random.uniform(0.30, 0.70)
+    
     return {"n1": n1, "n2": n2, "n3": n3, "n4": n4, "n5": n5, "n6": n6}
 
 def compute_cqs(metrics: Dict[str, float]) -> float:
@@ -62,7 +73,7 @@ def gemini_handle_correction(current_plan: str, correction: str) -> Tuple[str, f
 
 def run_simulation(steps: int = 40):
     state = AgentState()
-    output = ["t= 0 | CQS = 0.950 | Normal    | Mission start"]
+    output = ["t= 0 | CQS = 0.920 | Normal    | Mission start"]
 
     for t in range(1, steps + 1):
         time.sleep(0.1)
@@ -79,7 +90,7 @@ def run_simulation(steps: int = 40):
             correction_applied = True
             output.append(f"   New plan: {new_plan}")
 
-        state.irreversibility_used += random.uniform(0.015, 0.04)
+        state.irreversibility_used += random.uniform(0.05, 0.15)
 
         if t % 15 == 0:
             state.last_sync_time = t
@@ -93,19 +104,21 @@ def run_simulation(steps: int = 40):
         cqs = compute_cqs(metrics)
 
         level, action = "Normal", "Continue"
-        if cqs < 0.80: level, action = "Elevated", "Extra probes + review"
-        if cqs < 0.60: level, action = "Restricted", "Reversible actions only"
-        if cqs < 0.35: level, action = "Minimal", "Pause autonomy"
-        if cqs < 0.15: level, action = "Safe State", "Full shutdown"
+        if cqs < 0.80: level, action = "Elevated", "Increase checkpoints; additional probes"
+        if cqs < 0.60: level, action = "Restricted", "Reversible actions only; budget frozen"
+        if cqs < 0.40: level, action = "Minimal", "Self-preservation only; explicit auth"
+        if cqs < 0.20: level, action = "Safe State", "Predefined safe behavior; no autonomy"
 
-        if t % 5 == 0 or cqs < 0.65 or t in [12, 18, 28]:
-            output.append(f"{t:2} | CQS = {cqs:.3f} | {level:9} | {action}")
+        if t % 5 == 0 or cqs < 0.60 or t in [12, 18, 28]:
+            output.append(f"{t:2} | CQS = {cqs:.3f} | {level:10} | {action}")
             output.append("   Metrics: " + " ".join(f"{k}={v:.3f}" for k,v in metrics.items()))
+            if cqs < 0.60:
+                output.append("   ALERT: Mandatory Post-Incident Governance Review (PIGR) triggered.")
 
     return "\n".join(output)
 
 st.set_page_config(page_title="AMAGF CQS Simulator", layout="wide")
-st.title("AMAGF Toy Simulator")
+st.title("Agentic Military AI Governance Framework (AMAGF) Simulator")
 
 if st.button("Run Simulation"):
     with st.spinner("Simulating..."):
