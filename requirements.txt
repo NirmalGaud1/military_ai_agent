@@ -1,0 +1,18 @@
+# Core Streamlit framework
+streamlit>=1.55.0
+
+# Data handling & numerics
+pandas>=2.2
+numpy>=1.26
+
+# Visualization
+altair>=5.4
+plotly>=5.24
+matplotlib>=3.9
+
+# UI Components & Dev Tools
+rich>=13.8
+streamlit-extras>=0.5
+
+# Gemini API Integration
+google-genai>=1.66
